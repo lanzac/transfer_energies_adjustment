@@ -108,7 +108,7 @@ is_bb_atom() {
 # done
 
 # FROM LOCAL DATABASE (multiple occ of amino-acids)-------------------------------------------------
-rm amino_acids_pdbs/*.pdb
+# rm amino_acids_pdbs/*.pdb
 
 for res in "${!residueName3To1[@]}" # <-tmp
 do # <-tmp
@@ -127,8 +127,10 @@ do
     if [[ $result == END* ]]; then break; fi
     #echo "$result" > amino_acids_pdbs/${res}_$i.pdb
     echo "$result" | 
+       martinize -f ${sys_path}/${PDBID}_clean.pdb -ff $martini/martini303v.partition -x ${sys_path}/${PDBID}_pdb2spn_input.pdb  -elastic
        freesasa $pdb  --shrake-rupley --format=pdb --radii=naccess --hydrogen --no-warnings --resolution=377 | 
        grep "^ATOM" > amino_acids_pdbs/${res}_${i}.pdb
+       
     ((i++))
     echo $i
 done
