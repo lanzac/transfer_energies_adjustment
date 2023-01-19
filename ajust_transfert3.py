@@ -6,7 +6,12 @@ pd.options.mode.chained_assignment = None  # default='warn'
 import os
 from os import system
 
-res_pdbs_dir_path = "/Users/andrelanrezac/Dev/ims_systems/impala/transfer_energies_validation/amino_acids_pdbs"
+import sys
+sys.path.insert(1, "/Users/andrelanrezac/Dev/BS_Project/biospring/scripts")
+import prepare_martini_v3beta as pm
+
+
+# André Lanrezac
 
 residueName3To1 = {
         "ALA" : "A",
@@ -102,7 +107,87 @@ all_new_Csp3_tr = {
         "VAL" :  "failed"
 }
 
-bb_atoms_names = ["CA","C","O","H","HA","N","H2","H3"]
+bb_atoms_names = ["CA","C","O","H","HA","N","H2","H3", "BB"] # "BB" is backbone in Martini
+
+ducarmeType_to_atomType = {
+    "Csp3": ["CT"],
+    "Csp2": ["C", "CA", "CB", "CC", "CD", "CK", "CM", "CN", "CQ", "CR", "CV", "CW", "C*"],
+    "Hnc": ["HC","H1","H2","H3","HA","H4","H5","HP","HZ"],
+    "Hc": ["H", "HO", "HS", "HW"],
+    "O": ["O", "O2", "OW", "OH", "OS"],
+    "N": ["N", "NA", "NB", "NC", "N2", "N3", "NT", "N*", "NY"],
+    "S": ["S", "SH"],
+    "nc": ["CY", "CZ", "C0", "F", "Cl", "Br", "I", "IM", "IB", "MG", "P", "CU", "FE", "Li", "IP", "Na", "K", "Rb", "Cs", "Zn"]
+}
+
+# --------------------------------------------------------------------------------------------------
+
+# BRASSEUR
+def get_ducarmeType(atomType):
+    for ducarmeType, atomTypes in ducarmeType_to_atomType.items():
+        if atomType in atomTypes:
+            return ducarmeType
+    return None
+
+ducarmeType_to_Etr = {"Csp3" : -0.105, 
+                       "Csp2" : -0.0134,
+                       "Hnc"  : -0.0397,
+                       "Hc"   : 0.0362,
+                       "O"    : 0.0403,
+                       "N"    : 0.112,
+                       "S"    : -0.108,
+                       #"nc"   : 0.000
+}
+
+# MARTINI
+# Hexadecane/Water
+HD_to_Etr = {
+    "P2"  : 0.21182233258948446,
+    "SP2" : 0.3029719321202046,
+    "P1"  : 0.18300296761132331,
+    "SP2a": 0.2632068660294278,
+    "SN2d": 0.14959239148435105,
+    "SQp" : 1.0982732539357418,
+    "SP4" : 0.3881827880290122,
+    "SQn" : 1.1115282759660008,
+    "TC4" : -0.11840246631403953,
+    "Qn"  : 0.6686092674933387,
+    "P4"  : 0.27954784028816315,
+    "TC3" : -0.22579074971514512,
+    "TN3d": 0.30839712156214943,
+    "TN3a": 0.30839712156214943,
+    "SC1" : -0.3067590812717072,
+    "SC3" : -0.20261247960538684,
+    "C4"  : -0.12824617415281714,
+    "TP1" : 0.43230667933265593,
+    "SP1" : 0.26510044060517907,
+    "SC2" : -0.27456831348393546,
+}
+
+# Octanol/Water
+OCOS_to_Etr = {
+    "P2"  : 0.0374651744716095,
+    "SP2" : 0.115508049120828,
+    "P1"  : 0.015850650737988636,
+    "SP2a": 0.07763655760580243,
+    "SN2d": 0.0056807237272538365,
+    "SQp" : 0.41279925751377883,
+    "SP4" : 0.17420886096911764,
+    "SQn" : 0.41279925751377883,
+    "TC4" : -0.17071983515047562,
+    "Qn"  : 0.21182233258948446,
+    "P4"  : 0.0922219679301157,
+    "TC3" : -0.22028365825867818,
+    "TN3d": 0.09362055475993823,
+    "TN3a": 0.09362055475993823,
+    "SC1" : -0.26510044060517907,
+    "SC3" : -0.19503818130238174,
+    "C4"  : -0.1844439358602314,
+    "TP1" : 0.16245919796577518,
+    "SP1" : 0.07953013218155372,
+    "SC2" : -0.24616469484766626,
+}
+
 
 # --------------------------------------------------------------------------------------------------
 
@@ -131,69 +216,58 @@ def compute_average_sasa(res3, res_data):
 
 
 # --------------------------------------------------------------------------------------------------
-
-ducarmeType_to_atomType = {
-    "Csp3": ["CT"],
-    "Csp2": ["C", "CA", "CB", "CC", "CD", "CK", "CM", "CN", "CQ", "CR", "CV", "CW", "C*"],
-    "Hnc": ["HC","H1","H2","H3","HA","H4","H5","HP","HZ"],
-    "Hc": ["H", "HO", "HS", "HW"],
-    "O": ["O", "O2", "OW", "OH", "OS"],
-    "N": ["N", "NA", "NB", "NC", "N2", "N3", "NT", "N*", "NY"],
-    "S": ["S", "SH"],
-    "nc": ["CY", "CZ", "C0", "F", "Cl", "Br", "I", "IM", "IB", "MG", "P", "CU", "FE", "Li", "IP", "Na", "K", "Rb", "Cs", "Zn"]
-}
-
-def get_ducarmeType(atomType):
-    for ducarmeType, atomTypes in ducarmeType_to_atomType.items():
-        if atomType in atomTypes:
-            return ducarmeType
-    return None
-
-ducarmeType_to_transferEnergies = {"Csp3" : -0.105, 
-                                    "Csp2" : -0.0134,
-                                    "Hnc"  : -0.0397,
-                                    "Hc"   : 0.0362,
-                                    "O"    : 0.0403,
-                                    "N"    : 0.112,
-                                    "S"    : -0.108,
-                                    #"nc"   : 0.000
-                                    }
+# INITIALIZATION
+ajustement_representation = "martini"
 
 
-# --------------------------------------------------------------------------------------------------
+match ajustement_representation:
+    case "brasseur":
+        type_to_Etr = ducarmeType_to_Etr
+        ref_type_ratio_name = "Csp3"
+        residues_data_path = "/Users/andrelanrezac/Dev/BS_Project/biospring/data/forcefield/nametotype.txt"
+        res_pdbs_dir_path = "/Users/andrelanrezac/Dev/ims_systems/impala/transfer_energies_validation/amino_acids_pdbs"
+    
+    case "martini":
+        type_to_Etr = HD_to_Etr # Hexadecane/Water
+        #type_to_Etr = OCOS_to_Etr # Octanol/Water
+        ref_type_ratio_name = "P2"
+        residues_data_path = "/Users/andrelanrezac/Dev/BS_Project/biospring/data/forcefield/martini_nametotype.txt"
+        res_pdbs_dir_path = "/Users/andrelanrezac/Dev/ims_systems/impala/transfer_energies_validation/amino_acids_martini_pdbs"
+
+
+
+
 # Final table
 # Initialize the DataFrame with the given data
-final_residues_ducarmeType = pd.DataFrame(columns=residueName3To1.keys(), index= list(ducarmeType_to_transferEnergies.keys()) + ["eimp_ref", "eimp_new", "eimp_ini"])
+final_residues_type = pd.DataFrame(columns=residueName3To1.keys(), index= list(type_to_Etr.keys()) + ["eimp_ref", "eimp_new", "eimp_ini"])
 
 # Add all experimental Ducarme sidechains transfer energies values (Fig3 Ducarme1998) to eimp_ref row
-final_residues_ducarmeType.loc["eimp_ref", transfer_exp.keys()] = list(transfer_exp.values())
+final_residues_type.loc["eimp_ref", transfer_exp.keys()] = list(transfer_exp.values())
 
 eimp_new_all = dict.fromkeys(residueName3To1.keys(), None)
 
 
-print(final_residues_ducarmeType)
+print(final_residues_type)
+
 
 # --------------------------------------------------------------------------------------------------
-# Configure residues_ducarmeType
-residues_ducarmeType = pd.DataFrame.from_dict(ducarmeType_to_transferEnergies, orient='index', columns=['tr_ref'])
-residues_ducarmeType = residues_ducarmeType.rename_axis('ducarmeType')
-# Set 'tr_diff' column to 0.0
-residues_ducarmeType = residues_ducarmeType.assign(tr_diff=0.0)
-# Set 'tr_new' column to values in 'tr_ref' column
-residues_ducarmeType = residues_ducarmeType.assign(tr_new=residues_ducarmeType['tr_ref'])
 
-new_Csp3 = residues_ducarmeType.loc["Csp3", "tr_ref"] # Initialization
-# METHOD 1
-# add tr_ratio with respect to Csp3 atomtype reference
-method=1
-# match method:
-#     case 1:
-residues_ducarmeType["tr_ratio"] = residues_ducarmeType["tr_ref"] / new_Csp3
+# Configure residues_ducarmeType
+residues_type = pd.DataFrame.from_dict(type_to_Etr, orient='index', columns=['tr_ref'])
+residues_type = residues_type.rename_axis('particleType')
+# Set 'tr_diff' column to 0.0
+residues_type = residues_type.assign(tr_diff=0.0)
+# Set 'tr_new' column to values in 'tr_ref' column
+residues_type = residues_type.assign(tr_new=residues_type['tr_ref'])
+
+ref_type_ratio = residues_type.loc[ref_type_ratio_name, "tr_ref"]
+residues_type["tr_ratio"] = residues_type["tr_ref"] / ref_type_ratio
+
 
 # --------------------------------------------------------------------------------------------------
 # Read nametotype file of all residues
-residues_data_path = "/Users/andrelanrezac/Dev/BS_Project/biospring/data/forcefield/nametotype.txt"
-residues_data_df = pd.read_csv(residues_data_path, sep='\t', header=None, names=['particleName', 'atomType'])
+
+residues_data_df = pd.read_csv(residues_data_path, sep='\t', header=None, names=['particleName', 'particleType'])
 # Get residue code 1 from particleName column and add to a new res1 column
 residues_data_df['res1'] = residues_data_df['particleName'].str.slice(0, 1)
 # Get atom name from particleName column and add to a new atomName column
@@ -204,12 +278,18 @@ residues_data_df.drop(columns=["particleName"], inplace=True)
 residues_data_df = residues_data_df.assign(av_sasa=0.0)
 # Add eimp column
 residues_data_df = residues_data_df.assign(eimp=0.0)
-# Get Ducarme type from each atomType and add it to a new column called ducarmeType
-residues_data_df['ducarmeType'] = residues_data_df['atomType'].apply(get_ducarmeType)
-residues_data_df.set_index('ducarmeType', inplace=True)
+
+# Get Ducarme type from each particleType and add it to a new column called ducarmeType
+match ajustement_representation:
+    case "brasseur":
+        residues_data_df['particleType'] = residues_data_df['particleType'].apply(get_ducarmeType)
+        residues_data_df.set_index('particleType', inplace=True)
+    case "martini":
+        residues_data_df.set_index('particleType', inplace=True)
+        
 
 # Merge residues_ducarmeType to residues_data_df
-residues_data_df = residues_data_df.join(residues_ducarmeType, how="right")
+residues_data_df = residues_data_df.join(residues_type, how="right")
 
 # Group data by res1
 residues_data_df_grouped = residues_data_df.groupby("res1")
@@ -227,7 +307,7 @@ for res3 in residueName3To1:
     # Clean a bit
     res_data.reset_index(inplace=True)
     res_data.drop(columns=["res1"], inplace=True)
-    res_data.set_index('ducarmeType', inplace=True)
+    res_data.set_index('particleType', inplace=True)
 
     is_bb = res_data.atomName.isin(bb_atoms_names) 
     backbone_data  = res_data[is_bb]
@@ -236,121 +316,134 @@ for res3 in residueName3To1:
 
     # Get ducarmeTypes that transfert energie will not be ajusted (all types present (in bb and not in sidechain) OR (not in bb AND not in sidechain)).
     # Group the data by ducarmeType
-    ducarmeType_grouped = is_bb.groupby('ducarmeType')
+    ducarmeType_grouped = is_bb.groupby('particleType')
     # Filter the groups that have all True values
     fixed_ducarmeTypes_indices = ducarmeType_grouped.filter(lambda x: x.all()).index
 
-    missing_type = list(set(ducarmeType_to_transferEnergies.keys()) - (set(res_data.index)))
+    missing_type = list(set(type_to_Etr.keys()) - (set(res_data.index)))
     print("Missing types: {}".format(missing_type))
 
     fixed_ducarmeTypes_indices = fixed_ducarmeTypes_indices.union(pd.Index(missing_type))
 
     print("Fixed ducarmeTypes: {}".format(fixed_ducarmeTypes_indices.values))
 
-    min_method_score = 10000000.0
-    best_method = 0
-    # Loop on all method
-    # for m in range(1,5):
-    for m in [4]:
+    methods = [1]
+    success = False
+    N = 10000
 
-        method = m
-        # Reinit
-        residues_ducarmeType.tr_new = residues_ducarmeType.tr_ref
-        
-        delta_ener = 0.0001
-        success = False
-        sign = 1
-        N = 100000
-        ind = 0
-        for i in range(N):
+    if (sidechain_data.empty):
+        enable_ajustment = False
+        best_method = methods[0]
+        best_tr_new = residues_type.tr_new
+        eimp_tot = np.NaN
+    else:
+        enable_ajustment = True
 
-            sidechain_data.update(residues_ducarmeType)
+    if (enable_ajustment):
+        min_method_score = 10000000.0
+        best_method = 0
+        # Loop on all method
+        # for m in range(1,5):
+        for m in methods:
+
+            method = m
+            # Reinit
+            residues_type.tr_new = residues_type.tr_ref
             
-            # Get output value
-            sidechain_data.eimp = -sidechain_data.av_sasa * sidechain_data.tr_new * -0.5 + (-0.018 * sidechain_data.av_sasa * -0.5)
-            eimp_tot = sum(sidechain_data.eimp) # output value
+            delta_ener = 0.0001
+            
+            sign = 1
+            
+            ind = 0
+            for i in range(N):
 
-            if (i==0):
+                sidechain_data.update(residues_type)
+                
+                # Get output value
+                sidechain_data.eimp = -sidechain_data.av_sasa * sidechain_data.tr_new * -0.5 + (-0.018 * sidechain_data.av_sasa * -0.5)
+                eimp_tot = sum(sidechain_data.eimp) # output value
+
+                if (i==0):
+                    previous_imp = eimp_tot
+                    print("-> Initial Ducarme sidechain transfer energie: {}".format(eimp_tot))
+                    final_residues_type.loc["eimp_ini", res3] = "{0:0.4f}".format(eimp_tot)
+
+                    print("-> Sidechain")
+                    print(sidechain_data)
+
+
+                diff_imp = eimp_tot - transfer_exp[res3] 
+
+                if (abs(diff_imp) > abs(previous_imp - transfer_exp[res3])):
+                    # Change sign
+                    sign *= -1
+
+                if (sign > 0): ind += i
+                else:          ind -= i
+                
                 previous_imp = eimp_tot
-                print("-> Initial Ducarme sidechain transfer energie: {}".format(eimp_tot))
-                final_residues_ducarmeType.loc["eimp_ini", res3] = "{0:0.4f}".format(eimp_tot)
+                
+                # if (abs(diff_imp) < 0.1):
+                match method:
+                    case 1 | 2 | 3:
+                        break_condition = abs(diff_imp) < 0.1
+                    case 4:
+                        break_condition = abs(diff_imp) < float(i)/N
 
-                print("-> Sidechain")
-                print(sidechain_data)
+                if (break_condition):
+                    #print(sidechain_data)
+                    # print("Final diff=",abs(diff_imp))
+                    # print("Final Eimp=",eimp_tot)
+                    # eimp_new_all[res3] = eimp_tot
+                    # print("Eimp_exp=", transfer_exp[res3])
+                    # print("--- i:{0} {1:9.3f} < {2:9.3f}".format(i, abs(diff_imp), float(i)/N))
+                    success=True
 
+                    # Compute method score
+                    method_score = sum(((residues_type.tr_new - residues_type.tr_ref) / residues_type.tr_ref).abs())
 
-            diff_imp = eimp_tot - transfer_exp[res3] 
+                    print("\nMethod {} score : {}".format(m, method_score))
+                    if (m==0):
+                        min_method_score = method_score
+                        best_tr_new = residues_type.tr_new
 
-            if (abs(diff_imp) > abs(previous_imp - transfer_exp[res3])):
-                # Change sign
-                sign *= -1
-
-            if (sign > 0): ind += i
-            else:          ind -= i
-            
-            previous_imp = eimp_tot
-            
-            # if (abs(diff_imp) < 0.1):
-            match method:
-                case 1 | 2 | 3:
-                    break_condition = abs(diff_imp) < 0.1
-                case 4:
-                    break_condition = abs(diff_imp) < float(i)/N
-
-            if (break_condition):
-                #print(sidechain_data)
-                # print("Final diff=",abs(diff_imp))
-                # print("Final Eimp=",eimp_tot)
-                # eimp_new_all[res3] = eimp_tot
-                # print("Eimp_exp=", transfer_exp[res3])
-                # print("--- i:{0} {1:9.3f} < {2:9.3f}".format(i, abs(diff_imp), float(i)/N))
-                success=True
-
-                # Compute method score
-                method_score = sum(((residues_ducarmeType.tr_new - residues_ducarmeType.tr_ref) / residues_ducarmeType.tr_ref).abs())
-
-                print("\nMethod {} score : {}".format(m, method_score))
-                if (m==0):
-                    min_method_score = method_score
-                    best_tr_new = residues_ducarmeType.tr_new
-
-                if (method_score < min_method_score):
-                    min_method_score = method_score
-                    best_method = method
-                    best_tr_new = residues_ducarmeType.tr_new
-                break
+                    if (method_score < min_method_score):
+                        min_method_score = method_score
+                        best_method = method
+                        best_tr_new = residues_type.tr_new
+                    break
 
 
-            # ADJUSTMENT ---------------------------------------------------------------------------------------------------
+                # ADJUSTMENT ---------------------------------------------------------------------------------------------------
 
-            match method:
-                case 1:
-                    new_Csp3 += sign * delta_ener
-                    residues_ducarmeType.tr_new = new_Csp3 * residues_ducarmeType.tr_ratio
-                    print("--- i:{0:,}/{1:,} {2:9.3f} kj.mol-1 > {3:1.2f}".format(i,N, abs(diff_imp), 0.1), end="\r")
-                case 2:
-                    residues_ducarmeType.tr_new += sign * delta_ener
-                    print("--- i:{0:,}/{1:,} {2:9.3f} kj.mol-1 > {3:1.2f}".format(i,N, abs(diff_imp), 0.1), end="\r")
-                case 3:
-                    tr_new = residues_ducarmeType.tr_new
-                    abs_tr_new = abs(tr_new)
-                    sig = 1.0/(1.0+np.exp(tr_new * np.sign(residues_ducarmeType.tr_ref) - 0.2)**-40)
-                    #residues_ducarmeType.tr_new += sign * 0.001 * sig * np.sign(residues_ducarmeType.tr_ref)
-                    residues_ducarmeType.tr_new += sign * 0.01 * sig
-                    print("--- i:{0:,}/{1:,} {2:9.3f} kj.mol-1 > {3:1.2f}".format(i,N, abs(diff_imp), 0.1), end="\r")
-                case 4:
-                    tr_deviation = residues_ducarmeType.tr_diff / residues_ducarmeType.tr_ref
-                    residues_ducarmeType.tr_new = residues_ducarmeType.tr_ref + (float(ind)/N / (1 - tr_deviation))
-                    print("--- i:{0:,}/{1:,} {2:9.3f} kj.mol-1 > {3:9.3f}".format(i,N, abs(diff_imp), float(i)/N), end="\r")
+                match method:
+                    case 1:
+                        ref_type_ratio += sign * delta_ener
+                        residues_type.tr_new = ref_type_ratio * residues_type.tr_ratio
+                        print("--- i:{0:,}/{1:,} {2:9.3f} kj.mol-1 > {3:1.2f}".format(i,N, abs(diff_imp), 0.1), end="\r")
+                    case 2:
+                        residues_type.tr_new += sign * delta_ener
+                        print("--- i:{0:,}/{1:,} {2:9.3f} kj.mol-1 > {3:1.2f}".format(i,N, abs(diff_imp), 0.1), end="\r")
+                    case 3:
+                        tr_new = residues_type.tr_new
+                        abs_tr_new = abs(tr_new)
+                        sig = 1.0/(1.0+np.exp(tr_new * np.sign(residues_type.tr_ref) - 0.2)**-40)
+                        #residues_ducarmeType.tr_new += sign * 0.001 * sig * np.sign(residues_ducarmeType.tr_ref)
+                        residues_type.tr_new += sign * 0.01 * sig
+                        print("--- i:{0:,}/{1:,} {2:9.3f} kj.mol-1 > {3:1.2f}".format(i,N, abs(diff_imp), 0.1), end="\r")
+                    case 4:
+                        tr_deviation = residues_type.tr_diff / residues_type.tr_ref
+                        residues_type.tr_new = residues_type.tr_ref + (float(ind)/N / (1 - tr_deviation))
+                        print("--- i:{0:,}/{1:,} {2:9.3f} kj.mol-1 > {3:9.3f}".format(i,N, abs(diff_imp), float(i)/N), end="\r")
 
-            
-            # --------------------------------------------------------------------------------------------------------------
+                
+                # --------------------------------------------------------------------------------------------------------------
 
-            # is_bb_and_not_sidechain = residues_ducarmeType.index.isin(backbone_data.index)
-            if (fixed_ducarmeTypes_indices.values.any()):
-                residues_ducarmeType.tr_new.update(residues_ducarmeType.loc[fixed_ducarmeTypes_indices].tr_ref) # Stay fixed "fixed_ducarmeTypes" in residues_ducarmeType
+                # is_bb_and_not_sidechain = residues_ducarmeType.index.isin(backbone_data.index)
+                if (fixed_ducarmeTypes_indices.values.any()):
+                    residues_type.tr_new.update(residues_type.loc[fixed_ducarmeTypes_indices].tr_ref) # Stay fixed "fixed_ducarmeTypes" in residues_ducarmeType
 
-            residues_ducarmeType.tr_diff = residues_ducarmeType.tr_new - residues_ducarmeType.tr_ref
+                residues_type.tr_diff = residues_type.tr_new - residues_type.tr_ref
 
 
     print("Best methode for residue {} is {}".format(res3, best_method))
@@ -369,11 +462,11 @@ for res3 in residueName3To1:
     # print(sidechain_data)
 
     # final_residues_ducarmeType[res3].update(residues_ducarmeType.tr_new)
-    final_residues_ducarmeType[res3].update(best_tr_new)
-    final_residues_ducarmeType.loc["eimp_new", eimp_new_all.keys()] = ["{0:0.4f}".format(e) if isinstance(e,float) else e for e in eimp_new_all.values()]
+    final_residues_type[res3].update(best_tr_new)
+    final_residues_type.loc["eimp_new", eimp_new_all.keys()] = ["{0:0.4f}".format(e) if isinstance(e,float) else e for e in eimp_new_all.values()]
 
     print("-> Final residues ducarmeType")
-    print(final_residues_ducarmeType.to_string(col_space=4))
+    print(final_residues_type.to_string(col_space=4))
 
     # final_residues_ducarmeType.to_excel('out_table.xlsx', float_format='%.3f')
     # system("cat out_table.xlsx")

@@ -5,6 +5,8 @@ from os.path import isfile, join
 import time
 import sys
 
+# André Lanrezac
+
 residueName3To1 = {
         "ALA" : "A",
         "ARG" : "R",
@@ -111,10 +113,11 @@ def call_martinize(source_pdb, output_pdb):
         bead_type= line[7:11]
         # we assume that pdb has same number of line than itp atom lines
         # Replace PDB atom name by bead type
-        new_pdb_lines.append(output_pdb_lines[i][:12]+bead_type+output_pdb_lines[i][16:]) 
-
-
+        # new_pdb_lines.append(output_pdb_lines[i][:12]+bead_type+output_pdb_lines[i][16:])
+        new_pdb_lines.append(output_pdb_lines[i])
     save_text_to_file(''.join(new_pdb_lines), output_pdb)
+
+
     remove_file("tmp2")
 
 
@@ -162,7 +165,7 @@ def main():
     num_files_aa_path = num_files_in_dir(amino_acids_path)
 
     # GENERATE MARTINI PDBS ----------------------------------------------------
-    reset = False
+    reset = True
     if (reset) : 
         clean_database(aa_martini_path)
         # Get Martini structures from all aa pdb
@@ -176,8 +179,8 @@ def main():
         system("rm Protein_*.itp")
 
     # --------------------------------------------------------------------------
-    enable_all_atom_pdbs = True
-    enable_martini_pdbs = False
+    enable_all_atom_pdbs = False
+    enable_martini_pdbs = True
     # --------------------------------------------------------------------------
 
     # ADD SASA TO AA PDBS ------------------------------------------------------
