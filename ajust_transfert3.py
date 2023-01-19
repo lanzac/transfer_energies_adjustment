@@ -217,10 +217,10 @@ def compute_average_sasa(res3, res_data):
 
 # --------------------------------------------------------------------------------------------------
 # INITIALIZATION
-ajustement_representation = "martini"
+adjustment_representation = "martini"
 
 
-match ajustement_representation:
+match adjustment_representation:
     case "brasseur":
         type_to_Etr = ducarmeType_to_Etr
         ref_type_ratio_name = "Csp3"
@@ -280,7 +280,7 @@ residues_data_df = residues_data_df.assign(av_sasa=0.0)
 residues_data_df = residues_data_df.assign(eimp=0.0)
 
 # Get Ducarme type from each particleType and add it to a new column called ducarmeType
-match ajustement_representation:
+match adjustment_representation:
     case "brasseur":
         residues_data_df['particleType'] = residues_data_df['particleType'].apply(get_ducarmeType)
         residues_data_df.set_index('particleType', inplace=True)
@@ -331,13 +331,18 @@ for res3 in residueName3To1:
     success = False
     N = 10000
 
-    if (sidechain_data.empty):
-        enable_ajustment = False
-        best_method = methods[0]
-        best_tr_new = residues_type.tr_new
-        eimp_tot = np.NaN
+    # Specific cases for Martini3
+    if (adjustment_representation=="martini" and sidechain_data.empty):
+        enable_ajustment = True
+        # We adjust the backbone
+        adjusted_data = backbone_data
+    elif (adjustment_representation=="martini" and not sidechain_data.empty):
+        enable_ajustment = True
+        # Only sidechain energy will be taken into account in the acceptance condition.
+        adjusted_data = sidechain_data
     else:
         enable_ajustment = True
+        adjusted_data = sidechain_data
 
     if (enable_ajustment):
         min_method_score = 10000000.0
@@ -357,20 +362,16 @@ for res3 in residueName3To1:
             ind = 0
             for i in range(N):
 
-                sidechain_data.update(residues_type)
+                adjusted_data.update(residues_type)
                 
                 # Get output value
-                sidechain_data.eimp = -sidechain_data.av_sasa * sidechain_data.tr_new * -0.5 + (-0.018 * sidechain_data.av_sasa * -0.5)
-                eimp_tot = sum(sidechain_data.eimp) # output value
+                adjusted_data.eimp = -adjusted_data.av_sasa * adjusted_data.tr_new * -0.5 + (-0.018 * adjusted_data.av_sasa * -0.5)
+                eimp_tot = sum(adjusted_data.eimp) # output value
 
                 if (i==0):
                     previous_imp = eimp_tot
                     print("-> Initial Ducarme sidechain transfer energie: {}".format(eimp_tot))
                     final_residues_type.loc["eimp_ini", res3] = "{0:0.4f}".format(eimp_tot)
-
-                    print("-> Sidechain")
-                    print(sidechain_data)
-
 
                 diff_imp = eimp_tot - transfer_exp[res3] 
 
@@ -439,9 +440,11 @@ for res3 in residueName3To1:
                 
                 # --------------------------------------------------------------------------------------------------------------
 
-                # is_bb_and_not_sidechain = residues_ducarmeType.index.isin(backbone_data.index)
-                if (fixed_ducarmeTypes_indices.values.any()):
-                    residues_type.tr_new.update(residues_type.loc[fixed_ducarmeTypes_indices].tr_ref) # Stay fixed "fixed_ducarmeTypes" in residues_ducarmeType
+                # In martini representation we adjust all types because we don't have any reference energies to compare
+                # So we don't keep fixed type stored in 
+                if (adjustment_representation!="martini"):
+                    if (fixed_ducarmeTypes_indices.values.any()):
+                        residues_type.tr_new.update(residues_type.loc[fixed_ducarmeTypes_indices].tr_ref) # Stay fixed "fixed_ducarmeTypes" in residues_ducarmeType
 
                 residues_type.tr_diff = residues_type.tr_new - residues_type.tr_ref
 
