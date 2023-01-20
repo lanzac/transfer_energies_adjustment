@@ -217,7 +217,7 @@ def compute_average_sasa(res3, res_data):
 
 # --------------------------------------------------------------------------------------------------
 # INITIALIZATION
-adjustment_representation = "martini"
+adjustment_representation = "brasseur"
 
 
 match adjustment_representation:
@@ -239,7 +239,7 @@ match adjustment_representation:
 
 # Final table
 # Initialize the DataFrame with the given data
-final_residues_type = pd.DataFrame(columns=residueName3To1.keys(), index= list(type_to_Etr.keys()) + ["eimp_ref", "eimp_new", "eimp_ini"])
+final_residues_type = pd.DataFrame(columns=["tr_ref"]+list(residueName3To1.keys()), index= list(type_to_Etr.keys()) + ["eimp_ref", "eimp_new", "eimp_ini"])
 
 # Add all experimental Ducarme sidechains transfer energies values (Fig3 Ducarme1998) to eimp_ref row
 final_residues_type.loc["eimp_ref", transfer_exp.keys()] = list(transfer_exp.values())
@@ -260,8 +260,12 @@ residues_type = residues_type.assign(tr_diff=0.0)
 # Set 'tr_new' column to values in 'tr_ref' column
 residues_type = residues_type.assign(tr_new=residues_type['tr_ref'])
 
+# For method 1
 ref_type_ratio = residues_type.loc[ref_type_ratio_name, "tr_ref"]
 residues_type["tr_ratio"] = residues_type["tr_ref"] / ref_type_ratio
+
+# Update tr_ref column in final_residues_type
+final_residues_type["tr_ref"].update(residues_type['tr_ref'])
 
 
 # --------------------------------------------------------------------------------------------------
@@ -314,22 +318,40 @@ for res3 in residueName3To1:
     sidechain_data = res_data[~is_bb]
 
 
-    # Get ducarmeTypes that transfert energie will not be ajusted (all types present (in bb and not in sidechain) OR (not in bb AND not in sidechain)).
-    # Group the data by ducarmeType
-    ducarmeType_grouped = is_bb.groupby('particleType')
-    # Filter the groups that have all True values
-    fixed_ducarmeTypes_indices = ducarmeType_grouped.filter(lambda x: x.all()).index
-
-    missing_type = list(set(type_to_Etr.keys()) - (set(res_data.index)))
-    print("Missing types: {}".format(missing_type))
-
-    fixed_ducarmeTypes_indices = fixed_ducarmeTypes_indices.union(pd.Index(missing_type))
-
-    print("Fixed ducarmeTypes: {}".format(fixed_ducarmeTypes_indices.values))
 
     methods = [1]
     success = False
-    N = 10000
+    N = 100000
+
+    missing_type = list(set(type_to_Etr.keys()) - (set(res_data.index)))
+    missing_type_index = pd.Index(missing_type)
+    # Get type that belong to backbone that will not be ajusted
+    # Group the data by ducarmeType
+    ducarmeType_grouped = is_bb.groupby('particleType')
+    # Filter the groups that have all True values
+    # Here backbone_index contains all index of backbone type (fixed)
+    backbone_index = ducarmeType_grouped.filter(lambda x: x.all()).index
+
+    sidechain_index = list(set(res_data.index) - set(backbone_index))
+
+    if (adjustment_representation=="martini"):
+        print(f"Types only in backbone (adjusted): {', '.join(backbone_index.values)}")
+        print(f"Missing types (=NaN): {', '.join(missing_type_index.values)}")
+        fixed_types_index = missing_type_index
+    else:
+        # Add missing typesindex in fixed_ducarmeTypes_indices
+        print(f"Types only in backbone (fixed): {', '.join(backbone_index.values)}")
+        print(f"Missing types (=NaN): {', '.join(missing_type_index.values)}")
+        fixed_types_index = backbone_index.union(missing_type_index)
+
+    print(f"Types only in sidechain (adjusted) : {', '.join(sidechain_index)}")
+
+    # Don't show missing types in final table (NaN)
+    # Always show sidechain type  bg:white textcolor: black
+    # Show backbone type if not in sidechain type as  bg:grey textcolor: black(fixed)
+    # If value varies: bold
+
+
 
     # Specific cases for Martini3
     if (adjustment_representation=="martini" and sidechain_data.empty):
@@ -404,7 +426,7 @@ for res3 in residueName3To1:
                     method_score = sum(((residues_type.tr_new - residues_type.tr_ref) / residues_type.tr_ref).abs())
 
                     print("\nMethod {} score : {}".format(m, method_score))
-                    if (m==0):
+                    if (m==1):
                         min_method_score = method_score
                         best_tr_new = residues_type.tr_new
 
@@ -440,11 +462,9 @@ for res3 in residueName3To1:
                 
                 # --------------------------------------------------------------------------------------------------------------
 
-                # In martini representation we adjust all types because we don't have any reference energies to compare
-                # So we don't keep fixed type stored in 
-                if (adjustment_representation!="martini"):
-                    if (fixed_ducarmeTypes_indices.values.any()):
-                        residues_type.tr_new.update(residues_type.loc[fixed_ducarmeTypes_indices].tr_ref) # Stay fixed "fixed_ducarmeTypes" in residues_ducarmeType
+                if (fixed_types_index.values.any()):
+                    residues_type.tr_new.update(residues_type.loc[fixed_types_index].tr_ref) # Stay fixed "fixed_ducarmeTypes" in residues_ducarmeType
+                    residues_type.loc[missing_type_index, "tr_new"] = np.NaN
 
                 residues_type.tr_diff = residues_type.tr_new - residues_type.tr_ref
 
