@@ -13,28 +13,8 @@ import prepare_martini_v3beta as pm
 
 # André Lanrezac
 
-residueName3To1 = {
-        "ALA" : "A",
-        "ARG" : "R",
-        "ASN" : "N",
-        "ASP" : "D",
-        "CYS" : "C",
-        "GLN" : "Q",
-        "GLU" : "E",
-        "GLY" : "G",
-        "HIS" : "H",
-        "ILE" : "I",
-        "LEU" : "L",
-        "LYS" : "K",
-        "MET" : "M",
-        "PHE" : "F",
-        "PRO" : "P",
-        "SER" : "S",
-        "THR" : "T",
-        "TRP" : "W",
-        "TYR" : "Y",
-        "VAL" : "V"
-    }
+residueName3To1 = { "ALA" : "A", "ARG" : "R", "ASN" : "N", "ASP" : "D", "CYS" : "C", "GLN" : "Q", "GLU" : "E", "GLY" : "G", "HIS" : "H", "ILE" : "I", "LEU" : "L", "LYS" : "K", "MET" : "M", "PHE" : "F", "PRO" : "P", "SER" : "S", "THR" : "T", "TRP" : "W", "TYR" : "Y", "VAL" : "V" }
+
 
 residueName1To3 = {
         "R" : "ARG",
@@ -140,6 +120,54 @@ ducarmeType_to_Etr = {"Csp3" : -0.105,
 }
 
 # MARTINI
+# Hexadecane/Water partition kJ/mol
+HD_WN = {
+    "P2"  : -14.7,
+    "SP2" : -16.0,
+    "P1"  : -12.7,
+    "SP2a": -13.9,
+    "SN2d": -7.9,
+    "SQp" : -58.0,
+    "SP4" : -20.5,
+    "SQn" : -58.7,
+    "TC4" : 4.3,
+    "Qn"  : -46.4,
+    "P4"  : -19.4,
+    "TC3" : 8.2,
+    "TN3d": -11.2,
+    "TN3a": -11.2,
+    "SC1" : 16.2,
+    "SC3" : 10.7,
+    "C4"  : 8.9,
+    "TP1" : -15.7,
+    "SP1" : -14.0,
+    "SC2" : 14.5
+}
+
+# Octanol/Water partition kJ/mol
+OCOS_WN = {
+    "P2"  : -2.6,
+    "SP2" : -6.1,
+    "P1"  : -1.1,
+    "SP2a": -4.1,
+    "SN2d": -0.3,
+    "SQp" : -21.8,
+    "SP4" : -9.2,
+    "SQn" : -21.8,
+    "TC4" : 6.2,
+    "Qn"  : -14.7,
+    "P4"  : -6.4,
+    "TC3" : 8.0,
+    "TN3d": -3.4,
+    "TN3a": -3.4,
+    "SC1" : 14.0,
+    "SC3" : 10.3,
+    "C4"  : 12.8,
+    "TP1" : -5.9,
+    "SP1" : -4.2,
+    "SC2" : 13.0
+}
+
 # Hexadecane/Water
 HD_to_Etr = {
     "P2"  : 0.21182233258948446,
@@ -214,11 +242,21 @@ def compute_average_sasa(res3, res_data):
                         #print("atom: " + atom_name + " not found in file " + filename + " in line \n:" + line)        
     res_data["av_sasa"] /= pdb_count
 
+def save_text_to_file(text, filename):
+    text_file = open(filename, "w")
+    text_file.write(text)
+    text_file.close()
 
 # --------------------------------------------------------------------------------------------------
 # INITIALIZATION
-adjustment_representation = "brasseur"
 
+nametotransfert_ajusted_lines = []
+particletypetotransfert_ajusted_lines = []
+particletypetotransfert_ajusted_lines.append("#RES-ParticleType\tRefTransfer\tAdjustedTransfer\n")
+
+adjustment_representation = "martini"
+martini_sources = {"HexadecaneBeadSurf": HD_to_Etr, "OctanolBeadSurf": OCOS_to_Etr, "HexadecanePartition": HD_WN, "OctanolPartition": OCOS_WN}
+ms = "OctanolPartition"
 
 match adjustment_representation:
     case "brasseur":
@@ -228,7 +266,7 @@ match adjustment_representation:
         res_pdbs_dir_path = "/Users/andrelanrezac/Dev/ims_systems/impala/transfer_energies_validation/amino_acids_pdbs"
     
     case "martini":
-        type_to_Etr = HD_to_Etr # Hexadecane/Water
+        type_to_Etr = martini_sources[ms] # Hexadecane/Water
         #type_to_Etr = OCOS_to_Etr # Octanol/Water
         ref_type_ratio_name = "P2"
         residues_data_path = "/Users/andrelanrezac/Dev/BS_Project/biospring/data/forcefield/martini_nametotype.txt"
@@ -246,8 +284,14 @@ final_residues_type.loc["eimp_ref", transfer_exp.keys()] = list(transfer_exp.val
 
 eimp_new_all = dict.fromkeys(residueName3To1.keys(), None)
 
-
 print(final_residues_type)
+
+# Summary for each aa which atomic type belong to backbone or sidechain
+# Fixed or Adjusted : F or A
+# Backbone or sidechain : BB or SC
+# ->> FBB, ABB, FSC (never happens in practice), ASC
+# Missing atomic type : ---
+atomic_type_status = pd.DataFrame("---", columns=residueName3To1.keys(), index=type_to_Etr.keys())
 
 
 # --------------------------------------------------------------------------------------------------
@@ -266,6 +310,7 @@ residues_type["tr_ratio"] = residues_type["tr_ref"] / ref_type_ratio
 
 # Update tr_ref column in final_residues_type
 final_residues_type["tr_ref"].update(residues_type['tr_ref'])
+
 
 
 # --------------------------------------------------------------------------------------------------
@@ -288,8 +333,10 @@ match adjustment_representation:
     case "brasseur":
         residues_data_df['particleType'] = residues_data_df['particleType'].apply(get_ducarmeType)
         residues_data_df.set_index('particleType', inplace=True)
+        delta_ener = 0.0001
     case "martini":
         residues_data_df.set_index('particleType', inplace=True)
+        delta_ener = 0.0001
         
 
 # Merge residues_ducarmeType to residues_data_df
@@ -302,7 +349,7 @@ residues_data_df_grouped = residues_data_df.groupby("res1")
 # --------------------------------------------------------------------------------------------------
 # Compute all average sasa
 
-for res3 in residueName3To1:
+for res3, res1 in residueName3To1.items():
     print("-"*80)
     print("->", res3)
     res_data = residues_data_df_grouped.get_group(residueName3To1[res3]).reset_index()
@@ -320,8 +367,9 @@ for res3 in residueName3To1:
 
 
     methods = [1]
-    success = False
     N = 100000
+    success = False
+    
 
     missing_type = list(set(type_to_Etr.keys()) - (set(res_data.index)))
     missing_type_index = pd.Index(missing_type)
@@ -334,19 +382,26 @@ for res3 in residueName3To1:
 
     sidechain_index = list(set(res_data.index) - set(backbone_index))
 
+
     if (adjustment_representation=="martini"):
         print(f"Types only in backbone (adjusted): {', '.join(backbone_index.values)}")
         print(f"Missing types (=NaN): {', '.join(missing_type_index.values)}")
         fixed_types_index = missing_type_index
+        atomic_type_status.loc[backbone_index, res3] = "ABB"
     else:
         # Add missing typesindex in fixed_ducarmeTypes_indices
         print(f"Types only in backbone (fixed): {', '.join(backbone_index.values)}")
         print(f"Missing types (=NaN): {', '.join(missing_type_index.values)}")
         fixed_types_index = backbone_index.union(missing_type_index)
+        atomic_type_status.loc[backbone_index, res3] = "FBB"
 
     print(f"Types only in sidechain (adjusted) : {', '.join(sidechain_index)}")
 
-    # Don't show missing types in final table (NaN)
+    
+    atomic_type_status.loc[sidechain_index, res3] = "ASC"
+
+    print(atomic_type_status)
+
     # Always show sidechain type  bg:white textcolor: black
     # Show backbone type if not in sidechain type as  bg:grey textcolor: black(fixed)
     # If value varies: bold
@@ -377,7 +432,7 @@ for res3 in residueName3To1:
             # Reinit
             residues_type.tr_new = residues_type.tr_ref
             
-            delta_ener = 0.0001
+            
             
             sign = 1
             
@@ -405,13 +460,27 @@ for res3 in residueName3To1:
                 else:          ind -= i
                 
                 previous_imp = eimp_tot
+
+                # delta ener adjustment test for martini
+                if (adjustment_representation=="martini"):
+
+                    if(abs(diff_imp) < 1.0):
+                        delta_ener = 0.0001
+                    else:
+                        delta_ener = 0.001
+                    
+                    #delta_ener = 0.10 if abs(diff_imp) > 10.0 else 0.0001
                 
                 # if (abs(diff_imp) < 0.1):
                 match method:
                     case 1 | 2 | 3:
                         break_condition = abs(diff_imp) < 0.1
+                        if(break_condition):
+                            print("Break--- i:{0:,}/{1:,} {2:9.3f} kj.mol-1 < {3:9.3f}".format(i,N, abs(diff_imp), 0.1), end="\r")
                     case 4:
                         break_condition = abs(diff_imp) < float(i)/N
+                        if(break_condition):
+                            print("Break--- i:{0:,}/{1:,} {2:9.3f} kj.mol-1 < {3:9.3f}".format(i,N, abs(diff_imp), float(i)/N), end="\r")
 
                 if (break_condition):
                     #print(sidechain_data)
@@ -424,8 +493,10 @@ for res3 in residueName3To1:
 
                     # Compute method score
                     method_score = sum(((residues_type.tr_new - residues_type.tr_ref) / residues_type.tr_ref).abs())
-
                     print("\nMethod {} score : {}".format(m, method_score))
+
+                    #residues_type.loc[missing_type_index, "tr_new"] = np.NaN
+
                     if (m==1):
                         min_method_score = method_score
                         best_tr_new = residues_type.tr_new
@@ -438,6 +509,8 @@ for res3 in residueName3To1:
 
 
                 # ADJUSTMENT ---------------------------------------------------------------------------------------------------
+
+                
 
                 match method:
                     case 1:
@@ -464,7 +537,6 @@ for res3 in residueName3To1:
 
                 if (fixed_types_index.values.any()):
                     residues_type.tr_new.update(residues_type.loc[fixed_types_index].tr_ref) # Stay fixed "fixed_ducarmeTypes" in residues_ducarmeType
-                    residues_type.loc[missing_type_index, "tr_new"] = np.NaN
 
                 residues_type.tr_diff = residues_type.tr_new - residues_type.tr_ref
 
@@ -493,3 +565,17 @@ for res3 in residueName3To1:
 
     # final_residues_ducarmeType.to_excel('out_table.xlsx', float_format='%.3f')
     # system("cat out_table.xlsx")
+
+    res_data.tr_new.update(best_tr_new)
+
+    for index, row in res_data.iterrows():
+        nametotransfert_ajusted_lines.append("{0}\t{1:.4f}\n".format(res1+row['atomName'], row['tr_new']))
+
+    # save typetotransfer
+    for index, row in residues_type.loc[backbone_index.union(sidechain_index)].iterrows():
+        particletypetotransfert_ajusted_lines.append("{0}\t{1:.4f}\t{2:.4f}\n".format(res3+"-"+row.name, row.tr_ref,  row.tr_new))
+
+
+save_text_to_file(''.join(nametotransfert_ajusted_lines), "nametotransfer_ajusted_"+adjustment_representation+"_"+ms+".txt")
+save_text_to_file(''.join(particletypetotransfert_ajusted_lines), "particletypetotransfer_ajusted_"+adjustment_representation+"_"+ms+".txt")
+

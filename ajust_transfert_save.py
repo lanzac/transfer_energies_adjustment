@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 import pandas as pd
+pd.options.display.float_format = '{0:0.4f}'.format
 import numpy as np
 pd.options.mode.chained_assignment = None  # default='warn'
 import os
+from os import system
 
-res_pdbs_dir_path = "/Users/andrelanrezac/Dev/ims_systems/impala/transfer_energies_validation/amino_acids_pdbs"
+import sys
+sys.path.insert(1, "/Users/andrelanrezac/Dev/BS_Project/biospring/scripts")
+import prepare_martini_v3beta as pm
+
+
+# André Lanrezac
 
 residueName3To1 = {
         "ALA" : "A",
@@ -12,8 +19,8 @@ residueName3To1 = {
         "ASN" : "N",
         "ASP" : "D",
         "CYS" : "C",
-        "GLU" : "E",
         "GLN" : "Q",
+        "GLU" : "E",
         "GLY" : "G",
         "HIS" : "H",
         "ILE" : "I",
@@ -29,28 +36,53 @@ residueName3To1 = {
         "VAL" : "V"
     }
 
+residueName1To3 = {
+        "R" : "ARG",
+        "N" : "ASN",
+        "A" : "ALA",
+        "D" : "ASP",
+        "C" : "CYS",
+        "E" : "GLU",
+        "Q" : "GLN",
+        "G" : "GLY",
+        "H" : "HIS",
+        "I" : "ILE",
+        "L" : "LEU",
+        "K" : "LYS",
+        "M" : "MET",
+        "F" : "PHE",
+        "P" : "PRO",
+        "S" : "SER",
+        "T" : "THR",
+        "W" : "TRP",
+        "Y" : "TYR",
+        "V" : "VAL"
+    }
+
+# Table III Fauchère&Pliska x KCALTOKJ = Fig3 Ducarme1998
 transfer_exp = {
-        "ALA" : -1.3094,
-        "ARG" : 4.2870,
-        "ASN" : 2.5471,
-        "ASP" : 3.2825,
-        "CYS" : -6.4753,
-        "GLN" : 0.95067,
-        "GLU" : 2.7265,
+        "ALA" : -1.29704,
+        "ARG" : 4.22584,
+        "ASN" : 2.51,
+        "ASP" : 3.22168,
+        "CYS" : -6.44336,
+        "GLN" : 0.92048,
+        "GLU" : 2.67776,
         "GLY" : 0,
-        "HIS" : -0.55605,
-        "ILE" : -7.6413,
-        "LEU" : -7.1928,
-        "LYS" : 4.1973,
-        "MET" : -5.1300,
-        "PHE" : -7.5336,
-        "PRO" : 0,
-        "SER" : 0.19731,
-        "THR" : -1.0762,
-        "TRP" : -9.4709,
-        "TYR" : -4.0179,
-        "VAL" : -5.1300
+        "HIS" : -0.54392,
+        "ILE" : -7.53,
+        "LEU" : -7.11,
+        "LYS" : 4.14216,
+        "MET" : -5.14632,
+        "PHE" : -7.48936,
+        "PRO" : -3.01248,
+        "SER" : 0.16736,
+        "THR" : -1.08784,
+        "TRP" : -9.414,
+        "TYR" : -4.01664,
+        "VAL" : -5.10448,
 }
+
 
 all_new_Csp3_tr = {
         "ALA" :  "failed",
@@ -75,305 +107,495 @@ all_new_Csp3_tr = {
         "VAL" :  "failed"
 }
 
-# --------------------------------------------------------------------------------------------------
-type_to_ducarmeTypes = {}
-# Csp3 single-bonded carbons
-type_to_ducarmeTypes["CT"] = ("Csp3", -0.105)
+bb_atoms_names = ["CA","C","O","H","HA","N","H2","H3", "BB"] # "BB" is backbone in Martini
 
-# Csp2 double-bonded and aromatic carbons
-for csp2 in ["C", "CA", "CB", "CC", "CD", "CK", "CM", "CN", "CQ", "CR", "CV", "CW", "C*"]:
-    type_to_ducarmeTypes[csp2] = ("Csp2", -0.0134)
+ducarmeType_to_atomType = {
+    "Csp3": ["CT"],
+    "Csp2": ["C", "CA", "CB", "CC", "CD", "CK", "CM", "CN", "CQ", "CR", "CV", "CW", "C*"],
+    "Hnc": ["HC","H1","H2","H3","HA","H4","H5","HP","HZ"],
+    "Hc": ["H", "HO", "HS", "HW"],
+    "O": ["O", "O2", "OW", "OH", "OS"],
+    "N": ["N", "NA", "NB", "NC", "N2", "N3", "NT", "N*", "NY"],
+    "S": ["S", "SH"],
+    "nc": ["CY", "CZ", "C0", "F", "Cl", "Br", "I", "IM", "IB", "MG", "P", "CU", "FE", "Li", "IP", "Na", "K", "Rb", "Cs", "Zn"]
+}
 
-# H(=0) noncharged hydrogen (bound to C)
-for Hnc in ["HC","H1","H2","H3","HA","H4","H5","HP","HZ"]:
-    type_to_ducarmeTypes[Hnc] = ("Hnc", -0.0397)
-# H(/0), charged hydrogen
-for Hc in ["H", "HO", "HS", "HW"]:
-    type_to_ducarmeTypes[Hc] = ("Hc", 0.0362)
-# O, oxygen
-for O in ["O", "O2", "OW", "OH", "OS"]:
-    type_to_ducarmeTypes[O] = ("O", 0.0403)
-# N, nitrogen
-for N in ["N", "NA", "NB", "NC", "N2", "N3", "NT", "N*", "NY"]:
-    type_to_ducarmeTypes[N] = ("N", 0.112)
-# S, sulfur.
-for S in ["S", "SH"]:
-    type_to_ducarmeTypes[S] = ("S", -0.108)
-
-for charged_null in ["CY", "CZ", "C0", "F", "Cl", "Br", "I", "IM", "IB", "MG", 
-                     "P", "CU", "FE", "Li", "IP", "Na", "K", "Rb", "Cs", "Zn"]:
-    type_to_ducarmeTypes[charged_null] = ("nc", 0.000)
 # --------------------------------------------------------------------------------------------------
 
-def update_transfert_energies(new_diff_Csp3):
-    new_Csp3 = -0.1050 + new_diff_Csp3
-    # Update residue_types with new tranfert energies
-    global residue_types
-    residue_types["tr_new"] = new_Csp3 * residue_types["tr_ratio"]
+# BRASSEUR
+def get_ducarmeType(atomType):
+    for ducarmeType, atomTypes in ducarmeType_to_atomType.items():
+        if atomType in atomTypes:
+            return ducarmeType
+    return None
 
-    # Update residue_data tr_new from residue_types and keep atomname index
-    global residue_data
-    if ("tr_new" in residue_data.columns):
-        residue_data = residue_data.drop("tr_new", axis=1)
-    residue_data = residue_data.merge(residue_types[["types_ref", "tr_new"]], how='left').set_index(residue_data.index)
+ducarmeType_to_Etr = {"Csp3" : -0.105, 
+                       "Csp2" : -0.0134,
+                       "Hnc"  : -0.0397,
+                       "Hc"   : 0.0362,
+                       "O"    : 0.0403,
+                       "N"    : 0.112,
+                       "S"    : -0.108,
+                       #"nc"   : 0.000
+}
 
-    # Update backbone_data & sidechain_data tr_new from residue_data
-    global backbone_data
-    backbone_data  = residue_data[is_bb]
-    global sidechain_data
-    sidechain_data = residue_data[~is_bb]
+# MARTINI
+# Hexadecane/Water partition kJ/mol
+HD_WN = {
+    "P2"  : -14.7,
+    "SP2" : -16.0,
+    "P1"  : -12.7,
+    "SP2a": -13.9,
+    "SN2d": -7.9,
+    "SQp" : -58.0,
+    "SP4" : -20.5,
+    "SQn" : -58.7,
+    "TC4" : 4.3,
+    "Qn"  : -46.4,
+    "P4"  : -19.4,
+    "TC3" : 8.2,
+    "TN3d": -11.2,
+    "TN3a": -11.2,
+    "SC1" : 16.2,
+    "SC3" : 10.7,
+    "C4"  : 8.9,
+    "TP1" : -15.7,
+    "SP1" : -14.0,
+    "SC2" : 14.5
+}
 
-    return new_Csp3
+# Octanol/Water partition kJ/mol
+OCOS_WN = {
+    "P2"  : -2.6,
+    "SP2" : -6.1,
+    "P1"  : -1.1,
+    "SP2a": -4.1,
+    "SN2d": -0.3,
+    "SQp" : -21.8,
+    "SP4" : -9.2,
+    "SQn" : -21.8,
+    "TC4" : 6.2,
+    "Qn"  : -14.7,
+    "P4"  : -6.4,
+    "TC3" : 8.0,
+    "TN3d": -3.4,
+    "TN3a": -3.4,
+    "SC1" : 14.0,
+    "SC3" : 10.3,
+    "C4"  : 12.8,
+    "TP1" : -5.9,
+    "SP1" : -4.2,
+    "SC2" : 13.0
+}
+
+# Hexadecane/Water
+HD_to_Etr = {
+    "P2"  : 0.21182233258948446,
+    "SP2" : 0.3029719321202046,
+    "P1"  : 0.18300296761132331,
+    "SP2a": 0.2632068660294278,
+    "SN2d": 0.14959239148435105,
+    "SQp" : 1.0982732539357418,
+    "SP4" : 0.3881827880290122,
+    "SQn" : 1.1115282759660008,
+    "TC4" : -0.11840246631403953,
+    "Qn"  : 0.6686092674933387,
+    "P4"  : 0.27954784028816315,
+    "TC3" : -0.22579074971514512,
+    "TN3d": 0.30839712156214943,
+    "TN3a": 0.30839712156214943,
+    "SC1" : -0.3067590812717072,
+    "SC3" : -0.20261247960538684,
+    "C4"  : -0.12824617415281714,
+    "TP1" : 0.43230667933265593,
+    "SP1" : 0.26510044060517907,
+    "SC2" : -0.27456831348393546,
+}
+
+# Octanol/Water
+OCOS_to_Etr = {
+    "P2"  : 0.0374651744716095,
+    "SP2" : 0.115508049120828,
+    "P1"  : 0.015850650737988636,
+    "SP2a": 0.07763655760580243,
+    "SN2d": 0.0056807237272538365,
+    "SQp" : 0.41279925751377883,
+    "SP4" : 0.17420886096911764,
+    "SQn" : 0.41279925751377883,
+    "TC4" : -0.17071983515047562,
+    "Qn"  : 0.21182233258948446,
+    "P4"  : 0.0922219679301157,
+    "TC3" : -0.22028365825867818,
+    "TN3d": 0.09362055475993823,
+    "TN3a": 0.09362055475993823,
+    "SC1" : -0.26510044060517907,
+    "SC3" : -0.19503818130238174,
+    "C4"  : -0.1844439358602314,
+    "TP1" : 0.16245919796577518,
+    "SP1" : 0.07953013218155372,
+    "SC2" : -0.24616469484766626,
+}
 
 
-def compute_average_sasa(res_name3):
-    residue_data["av_sasa"] = 0.0
+# --------------------------------------------------------------------------------------------------
+
+def compute_average_sasa(res3, res_data):
+
+    res_data.set_index("atomName", inplace=True)
+
     pdb_count = 0
     for filename in os.listdir(res_pdbs_dir_path):
-        if filename.startswith(res_name3):
+        if filename.startswith(res3):
             pdb_count += 1
             with open(os.path.join(res_pdbs_dir_path, filename), 'r') as f:
                 for line in f:
                     atom_name = line[12:16].strip()
-                    res_name3 = line[17:20]
+                    res3 = line[17:20]
                     sasa = line[60:66] # wrote in temp factor by freesasa
                     # Add sasa of each particle
                     #if (atom_name in bb_atoms_names): continue
-                    residue_data.loc[atom_name, "av_sasa"] += float(sasa)
-                    
-    residue_data["av_sasa"] /= pdb_count
+                    try:
+                        res_data.loc[atom_name, "av_sasa"] += float(sasa)  
+                    except:
+                        # TO DOT : create a log error file
+                        continue
+                        #print("atom: " + atom_name + " not found in file " + filename + " in line \n:" + line)        
+    res_data["av_sasa"] /= pdb_count
+
+def save_text_to_file(text, filename):
+    text_file = open(filename, "w")
+    text_file.write(text)
+    text_file.close()
+
+# --------------------------------------------------------------------------------------------------
+# INITIALIZATION
+
+nametotransfert_ajusted_lines = []
+particletypetotransfert_ajusted_lines = []
+particletypetotransfert_ajusted_lines.append("#RES-ParticleType\tRefTransfer\tAdjustedTransfer\n")
+
+adjustment_representation = "martini"
+martini_sources = {"HexadecaneBeadSurf": HD_to_Etr, "OctanolBeadSurf": OCOS_to_Etr, "HexadecanePartition": HD_WN, "OctanolPartition": OCOS_WN}
+ms = "OctanolPartition"
+
+match adjustment_representation:
+    case "brasseur":
+        type_to_Etr = ducarmeType_to_Etr
+        ref_type_ratio_name = "Csp3"
+        residues_data_path = "/Users/andrelanrezac/Dev/BS_Project/biospring/data/forcefield/nametotype.txt"
+        res_pdbs_dir_path = "/Users/andrelanrezac/Dev/ims_systems/impala/transfer_energies_validation/amino_acids_pdbs"
+    
+    case "martini":
+        type_to_Etr = martini_sources[ms] # Hexadecane/Water
+        #type_to_Etr = OCOS_to_Etr # Octanol/Water
+        ref_type_ratio_name = "P2"
+        residues_data_path = "/Users/andrelanrezac/Dev/BS_Project/biospring/data/forcefield/martini_nametotype.txt"
+        res_pdbs_dir_path = "/Users/andrelanrezac/Dev/ims_systems/impala/transfer_energies_validation/amino_acids_martini_pdbs"
+
+
+
+
+# Final table
+# Initialize the DataFrame with the given data
+final_residues_type = pd.DataFrame(columns=["tr_ref"]+list(residueName3To1.keys()), index= list(type_to_Etr.keys()) + ["eimp_ref", "eimp_new", "eimp_ini"])
+
+# Add all experimental Ducarme sidechains transfer energies values (Fig3 Ducarme1998) to eimp_ref row
+final_residues_type.loc["eimp_ref", transfer_exp.keys()] = list(transfer_exp.values())
+
+eimp_new_all = dict.fromkeys(residueName3To1.keys(), None)
+
+print(final_residues_type)
+
+# Summary for each aa which atomic type belong to backbone or sidechain
+# Fixed or Adjusted : F or A
+# Backbone or sidechain : BB or SC
+# ->> FBB, ABB, FSC (never happens in practice), ASC
+# Missing atomic type : ---
+atomic_type_status = pd.DataFrame("---", columns=residueName3To1.keys(), index=type_to_Etr.keys())
 
 
 # --------------------------------------------------------------------------------------------------
 
-#res_name3 = "ALA"
+# Configure residues_ducarmeType
+residues_type = pd.DataFrame.from_dict(type_to_Etr, orient='index', columns=['tr_ref'])
+residues_type = residues_type.rename_axis('particleType')
+# Set 'tr_diff' column to 0.0
+residues_type = residues_type.assign(tr_diff=0.0)
+# Set 'tr_new' column to values in 'tr_ref' column
+residues_type = residues_type.assign(tr_new=residues_type['tr_ref'])
+
+# For method 1
+ref_type_ratio = residues_type.loc[ref_type_ratio_name, "tr_ref"]
+residues_type["tr_ratio"] = residues_type["tr_ref"] / ref_type_ratio
+
+# Update tr_ref column in final_residues_type
+final_residues_type["tr_ref"].update(residues_type['tr_ref'])
 
 
+
+# --------------------------------------------------------------------------------------------------
 # Read nametotype file of all residues
-nametotype_path = "/Users/andrelanrezac/Dev/BS_Project/biospring/data/forcefield/nametotype.txt"
-nametotype_df = pd.read_csv(nametotype_path, sep="\t", names=["name", "type"], skip_blank_lines=True, keep_default_na=False).dropna()
 
-# Keep only name and type column
-nametoype_all_df = nametotype_df[["name", "type"]]
+residues_data_df = pd.read_csv(residues_data_path, sep='\t', header=None, names=['particleName', 'particleType'])
+# Get residue code 1 from particleName column and add to a new res1 column
+residues_data_df['res1'] = residues_data_df['particleName'].str.slice(0, 1)
+# Get atom name from particleName column and add to a new atomName column
+residues_data_df['atomName'] = residues_data_df['particleName'].str.slice(1)
+# Drop particleName column
+residues_data_df.drop(columns=["particleName"], inplace=True)
+# Add average sasa column
+residues_data_df = residues_data_df.assign(av_sasa=0.0)
+# Add eimp column
+residues_data_df = residues_data_df.assign(eimp=0.0)
 
-# Add residue code 1 column
-nametoype_all_df["res1"] = nametoype_all_df["name"].apply(lambda x: x[0][0])
+# Get Ducarme type from each particleType and add it to a new column called ducarmeType
+match adjustment_representation:
+    case "brasseur":
+        residues_data_df['particleType'] = residues_data_df['particleType'].apply(get_ducarmeType)
+        residues_data_df.set_index('particleType', inplace=True)
+        delta_ener = 0.0001
+    case "martini":
+        residues_data_df.set_index('particleType', inplace=True)
+        delta_ener = 0.0001
+        
 
-# Group by res1
-nametoype_all_groups = nametoype_all_df.groupby("res1")
+# Merge residues_ducarmeType to residues_data_df
+residues_data_df = residues_data_df.join(residues_type, how="right")
+
+# Group data by res1
+residues_data_df_grouped = residues_data_df.groupby("res1")
 
 
-for res_name3 in residueName3To1:
+# --------------------------------------------------------------------------------------------------
+# Compute all average sasa
+
+for res3, res1 in residueName3To1.items():
     print("-"*80)
-    print("->", res_name3)
+    print("->", res3)
+    res_data = residues_data_df_grouped.get_group(residueName3To1[res3]).reset_index()
+    compute_average_sasa(res3, res_data)
 
-    # Initialize INPUT VALUES
-    # typetotransfer_path = "/Users/andrelanrezac/Dev/BS_Project/biospring/data/forcefield/typetotransfer.txt"
-    # typetotransfert_df = pd.read_csv(typetotransfer_path, sep="\t", names=["type", "transfer"])
-    ##typetotransfert_df = typetotransfert_df.set_index("type")
+    # Clean a bit
+    res_data.reset_index(inplace=True)
+    res_data.drop(columns=["res1"], inplace=True)
+    res_data.set_index('particleType', inplace=True)
 
-    # Read nametotype file of all residues
-    # nametotype_path = "/Users/andrelanrezac/Dev/BS_Project/biospring/data/forcefield/nametotype.txt"
-    # nametotype_df = pd.read_csv(nametotype_path, sep="\t", names=["name", "type"], skip_blank_lines=True).dropna()
+    is_bb = res_data.atomName.isin(bb_atoms_names) 
+    backbone_data  = res_data[is_bb]
+    sidechain_data = res_data[~is_bb]
 
-    # # Keep only the current residue atom types
-    # nametotype_df = nametotype_df[nametotype_df.name.str.startswith(residueName3To1[res_name3])]
 
-    # Keep only name and type column
-    #nametoype_all_df = nametotype_df[["name", "type"]]
 
-    # 
-    # nametotype_df = nametotype_df.drop("name", axis=1)
-    # nametotype_df = nametotype_df.drop_duplicates(subset=["type"])
-    # nametotype_df["tr_diff"] = 0.0
-    # nametotype_df = nametotype_df.merge(typetotransfert_df, how='left')
-
-    # ----------------------------------------------------------------------------------------------
-    # INPUT
-    # ----------------------------------------------------------------------------------------------
-    residue_group = nametoype_all_groups.get_group(residueName3To1[res_name3])
-    global residue_types
-    residue_types = residue_group
-    
-    # Filter by unique atom type, each atom type id associated by one transfer energy.
-    # Different atom types can share the same transfer energy.
-    # All transfert energy ajustments are made in accordance with the 7 atomic types of Ducarme1998.
-    # Add references types (Ducarme1998) column -> filter by unique atomic type -> drop type name & res1 columns
-    residue_types[["types_ref", "tr_ref"]] = residue_types.apply(lambda x: type_to_ducarmeTypes[x["type"]], axis=1, result_type='expand')
-    residue_types = residue_types.drop_duplicates(subset=["types_ref"])
-    residue_types = residue_types.drop(["name", "type", "res1"], axis=1)
-
-    # add tr_ratio with respect to Csp3 atomtype reference
-    residue_types["tr_ratio"] = residue_types["tr_ref"] / -0.1050
-
-    # Reset index from 0
-    residue_types = residue_types.reset_index(drop=True)
-    
-    # Initialize residue_data
-    global residue_data
-    residue_data = residue_group[["name", "type"]].copy()
-    # Get atomname, remove res1 to particle name
-    residue_data["atomname"] = residue_data["name"].apply(lambda x: x[1:])
-    residue_data = residue_data.drop("name", axis=1)
-    # Get types_ref from type
-    residue_data[["types_ref", "tr_ref"]] = residue_data.apply(lambda x: type_to_ducarmeTypes[x["type"]], axis=1, result_type='expand')
-    residue_data = residue_data.drop("type", axis=1)
-
-    # Set atomname column to index
-    residue_data = residue_data.set_index("atomname")
-
-    # Split residue_data to backbone_data and  sidechain_data
-    bb_atoms_names = ["CA","C","O","H","HA","N","H2","H3"]
-    global is_bb
-    is_bb = residue_data.index.isin(bb_atoms_names) 
-
-    # Compute the average sasa value for each particle and update/add av_sasa to sidechain_data
-    # Call before update_transfert_energies to keep av_sava column in backbone_data and sidechain_data
-    compute_average_sasa(res_name3)
-
-    diff_Csp3 = 0.00
-    new_Csp3 = 0.00
-    sign = 1
-    update_transfert_energies(diff_Csp3)
-    
+    methods = [1]
+    N = 100000
+    success = False
     
 
-    # Adjuts transfert by modifying tr_diff
-    success=False
-    for i in range(10000):
-        # Reset eimp
-        sidechain_data["eimp"] = 0.0
+    missing_type = list(set(type_to_Etr.keys()) - (set(res_data.index)))
+    missing_type_index = pd.Index(missing_type)
+    # Get type that belong to backbone that will not be ajusted
+    # Group the data by ducarmeType
+    ducarmeType_grouped = is_bb.groupby('particleType')
+    # Filter the groups that have all True values
+    # Here backbone_index contains all index of backbone type (fixed)
+    backbone_index = ducarmeType_grouped.filter(lambda x: x.all()).index
 
-        # Compute Eimp
-        sidechain_data.eimp = -sidechain_data.av_sasa * sidechain_data.tr_new * -0.5 + (-0.018 * sidechain_data.av_sasa * -0.5)
-        eimp_tot = sum(sidechain_data.eimp)
-        abs_diff_imp = abs(eimp_tot - transfer_exp[res_name3])
+    sidechain_index = list(set(res_data.index) - set(backbone_index))
 
 
-        if (i > 0): # keep initial tr values for the first step
-            #diff_Csp3 = np.random.uniform(-0.5, 0.5) * 2*abs(ref_diff_imp)
-            diff_Csp3 += sign * 0.0001
+    if (adjustment_representation=="martini"):
+        print(f"Types only in backbone (adjusted): {', '.join(backbone_index.values)}")
+        print(f"Missing types (=NaN): {', '.join(missing_type_index.values)}")
+        fixed_types_index = missing_type_index
+        atomic_type_status.loc[backbone_index, res3] = "ABB"
+    else:
+        # Add missing typesindex in fixed_ducarmeTypes_indices
+        print(f"Types only in backbone (fixed): {', '.join(backbone_index.values)}")
+        print(f"Missing types (=NaN): {', '.join(missing_type_index.values)}")
+        fixed_types_index = backbone_index.union(missing_type_index)
+        atomic_type_status.loc[backbone_index, res3] = "FBB"
 
-            # Check if with the new diff_Csp3 value we move away from the ref value
-            if (abs_diff_imp > abs(last_imp - transfer_exp[res_name3])):
-                # Change sign
-                sign *= -1
-                #new_Csp3 = update_transfert_energies(-diff_Csp3)
-            else:
-                new_Csp3 = update_transfert_energies(diff_Csp3)
-
-        last_imp = eimp_tot
-
-        # print("new_Csp3: ", new_Csp3)
-        #print(res_name3, " eimp_tot: ", eimp_tot, "eimp_exp: ", transfer_exp[res_name3])
-
-        if (i == 0):
-            ref_diff_imp = eimp_tot - transfer_exp[res_name3]
-            print("imp ini:", eimp_tot)
-            print("diff_imp:", ref_diff_imp)
-        
-        if (abs_diff_imp < 0.1):
-            #print(sidechain_data)
-            print("Final diff=",abs_diff_imp)
-            print("Final Eimp=",eimp_tot)
-            print("Eimp_exp=", transfer_exp[res_name3])
-            all_new_Csp3_tr[res_name3] = new_Csp3
-            success=True
-            break
-        # else:
-        #     print("Diff=",abs_diff_imp)
-
-    print("-> Residue atomic types")
-    print(residue_types)
-    print("-> Backbone")
-    print(backbone_data)
-    print("-> Sidechain")
-    print(sidechain_data)
-        
-    
-    if (not success):
-        print("="*80)
-        print("adjusted transfert not found for res ", res_name3)
-        print("="*80)
-
-    for res, tr in all_new_Csp3_tr.items():
-        print(res, " ", tr)
+    print(f"Types only in sidechain (adjusted) : {', '.join(sidechain_index)}")
 
     
-"""
-    amber_ff_path = "/Users/andrelanrezac/Dev/BS_Project/biospring/data/forcefield/amber.ff"
-    headers = ["name", "charge", "radius", "epsilon", "mass", "tr_ref"]
-    amber_ff_df = pd.read_csv(amber_ff_path, sep="\t", names=headers, skiprows=1)
+    atomic_type_status.loc[sidechain_index, res3] = "ASC"
 
-    # tr_ref and av_sasa are constant values
-    # tr_diff and eimp are variable values
-    df = amber_ff_df[["name"]]
+    print(atomic_type_status)
 
-    df = df.merge(nametoype_all_df, how='left')
-    df["av_sasa"] = 0.0
-    df["eimp"] = 0.0
-
-    # Filter to keep only the residue considered
-    df = df[df.name.str.startswith(residueName3To1[res_name3])]
+    # Always show sidechain type  bg:white textcolor: black
+    # Show backbone type if not in sidechain type as  bg:grey textcolor: black(fixed)
+    # If value varies: bold
 
 
-    # Set particle name as index
-    df = df.set_index("name")
 
-    # Exclude backbone atoms
-    bb_atoms_names = ["CA","C","O","H","HA","N","H2","H3"]
-    df = df.drop([residueName3To1[res_name3]+a for a in bb_atoms_names], errors='ignore')
+    # Specific cases for Martini3
+    if (adjustment_representation=="martini" and sidechain_data.empty):
+        enable_ajustment = True
+        # We adjust the backbone
+        adjusted_data = backbone_data
+    elif (adjustment_representation=="martini" and not sidechain_data.empty):
+        enable_ajustment = True
+        # Only sidechain energy will be taken into account in the acceptance condition.
+        adjusted_data = sidechain_data
+    else:
+        enable_ajustment = True
+        adjusted_data = sidechain_data
 
-    # Compute the average sasa value for each particle
-    res_pdbs_dir_path = "/Users/andrelanrezac/Dev/ims_systems/impala/transfer_energies_validation/amino_acids_pdbs"
-    pdb_count = 0
-    for filename in os.listdir(res_pdbs_dir_path):
-        if filename.startswith(res_name3):
-            pdb_count += 1
-            with open(os.path.join(res_pdbs_dir_path, filename), 'r') as f:
-                for line in f:
-                    atom_name = line[12:16].strip()
-                    res_name3 = line[17:20]
-                    sasa = line[60:66] # wrote in temp factor by freesasa
-                    particle_name = residueName3To1[res_name3] + atom_name
-                    # Add sasa of each particle
-                    if (atom_name in bb_atoms_names): continue
-                    df.loc[particle_name, "av_sasa"] += float(sasa)
+    if (enable_ajustment):
+        min_method_score = 10000000.0
+        best_method = 0
+        # Loop on all method
+        # for m in range(1,5):
+        for m in methods:
+
+            method = m
+            # Reinit
+            residues_type.tr_new = residues_type.tr_ref
+            
+            
+            
+            sign = 1
+            
+            ind = 0
+            for i in range(N):
+
+                adjusted_data.update(residues_type)
+                
+                # Get output value
+                adjusted_data.eimp = -adjusted_data.av_sasa * adjusted_data.tr_new * -0.5 + (-0.018 * adjusted_data.av_sasa * -0.5)
+                eimp_tot = sum(adjusted_data.eimp) # output value
+
+                if (i==0):
+                    previous_imp = eimp_tot
+                    print("-> Initial Ducarme sidechain transfer energie: {}".format(eimp_tot))
+                    final_residues_type.loc["eimp_ini", res3] = "{0:0.4f}".format(eimp_tot)
+
+                diff_imp = eimp_tot - transfer_exp[res3] 
+
+                if (abs(diff_imp) > abs(previous_imp - transfer_exp[res3])):
+                    # Change sign
+                    sign *= -1
+
+                if (sign > 0): ind += i
+                else:          ind -= i
+                
+                previous_imp = eimp_tot
+
+                # delta ener adjustment test for martini
+                if (adjustment_representation=="martini"):
+
+                    if(abs(diff_imp) < 1.0):
+                        delta_ener = 0.0001
+                    else:
+                        delta_ener = 0.001
                     
-    df.av_sasa /= pdb_count
+                    #delta_ener = 0.10 if abs(diff_imp) > 10.0 else 0.0001
+                
+                # if (abs(diff_imp) < 0.1):
+                match method:
+                    case 1 | 2 | 3:
+                        break_condition = abs(diff_imp) < 0.1
+                        if(break_condition):
+                            print("Break--- i:{0:,}/{1:,} {2:9.3f} kj.mol-1 < {3:9.3f}".format(i,N, abs(diff_imp), 0.1), end="\r")
+                    case 4:
+                        break_condition = abs(diff_imp) < float(i)/N
+                        if(break_condition):
+                            print("Break--- i:{0:,}/{1:,} {2:9.3f} kj.mol-1 < {3:9.3f}".format(i,N, abs(diff_imp), float(i)/N), end="\r")
+
+                if (break_condition):
+                    #print(sidechain_data)
+                    # print("Final diff=",abs(diff_imp))
+                    # print("Final Eimp=",eimp_tot)
+                    # eimp_new_all[res3] = eimp_tot
+                    # print("Eimp_exp=", transfer_exp[res3])
+                    # print("--- i:{0} {1:9.3f} < {2:9.3f}".format(i, abs(diff_imp), float(i)/N))
+                    success=True
+
+                    # Compute method score
+                    method_score = sum(((residues_type.tr_new - residues_type.tr_ref) / residues_type.tr_ref).abs())
+                    print("\nMethod {} score : {}".format(m, method_score))
+
+                    #residues_type.loc[missing_type_index, "tr_new"] = np.NaN
+
+                    if (m==1):
+                        min_method_score = method_score
+                        best_tr_new = residues_type.tr_new
+
+                    if (method_score < min_method_score):
+                        min_method_score = method_score
+                        best_method = method
+                        best_tr_new = residues_type.tr_new
+                    break
 
 
-    # Adjuts transfert by modifying tr_diff
-    success=False
-    for i in range(1000):
-        nametotype_df["tr_diff"] = np.random.uniform(-0.05, 0.05, size=nametotype_df.shape[0])
-        nametotype_df["tr_new"] = nametotype_df["tr_diff"] + nametotype_df["transfer"]
-        df = df.merge(nametotype_df[["type", "tr_new"]], how='left')
-        # ----
-        #print(nametotype_df) # <- tr_diff column is the input
+                # ADJUSTMENT ---------------------------------------------------------------------------------------------------
 
-        # Compute Eimp
-        df.eimp = -df.av_sasa * df.tr_new * -0.5 + (-0.018 * df.av_sasa * -0.5)
+                
 
-        
-        eimp_tot = sum(df.eimp)
-        abs_diff_imp = abs(eimp_tot - transfer_exp[res_name3])
-        
-        if (abs_diff_imp < 0.01):
-            print("*"*80)
-            print(res_name3)
-            print(nametotype_df)
-            #print(df)
-            print("Diff=",abs_diff_imp)
-            print("Eimp=",eimp_tot)
-            print("Eimp_exp=", transfer_exp[res_name3])
-            success=True
-            break
-        df = df.drop("tr_new", axis=1)
-    
+                match method:
+                    case 1:
+                        ref_type_ratio += sign * delta_ener
+                        residues_type.tr_new = ref_type_ratio * residues_type.tr_ratio
+                        print("--- i:{0:,}/{1:,} {2:9.3f} kj.mol-1 > {3:1.2f}".format(i,N, abs(diff_imp), 0.1), end="\r")
+                    case 2:
+                        residues_type.tr_new += sign * delta_ener
+                        print("--- i:{0:,}/{1:,} {2:9.3f} kj.mol-1 > {3:1.2f}".format(i,N, abs(diff_imp), 0.1), end="\r")
+                    case 3:
+                        tr_new = residues_type.tr_new
+                        abs_tr_new = abs(tr_new)
+                        sig = 1.0/(1.0+np.exp(tr_new * np.sign(residues_type.tr_ref) - 0.2)**-40)
+                        #residues_ducarmeType.tr_new += sign * 0.001 * sig * np.sign(residues_ducarmeType.tr_ref)
+                        residues_type.tr_new += sign * 0.01 * sig
+                        print("--- i:{0:,}/{1:,} {2:9.3f} kj.mol-1 > {3:1.2f}".format(i,N, abs(diff_imp), 0.1), end="\r")
+                    case 4:
+                        tr_deviation = residues_type.tr_diff / residues_type.tr_ref
+                        residues_type.tr_new = residues_type.tr_ref + (float(ind)/N / (1 - tr_deviation))
+                        print("--- i:{0:,}/{1:,} {2:9.3f} kj.mol-1 > {3:9.3f}".format(i,N, abs(diff_imp), float(i)/N), end="\r")
+
+                
+                # --------------------------------------------------------------------------------------------------------------
+
+                if (fixed_types_index.values.any()):
+                    residues_type.tr_new.update(residues_type.loc[fixed_types_index].tr_ref) # Stay fixed "fixed_ducarmeTypes" in residues_ducarmeType
+
+                residues_type.tr_diff = residues_type.tr_new - residues_type.tr_ref
+
+
+    print("Best methode for residue {} is {}".format(res3, best_method))
+
     if (not success):
         print("="*80)
-        print("adjusted transfert not found for res ", res_name3)
+        print("adjusted transfert not found for res ", res3)
         print("="*80)
 
-"""
+    eimp_new_all[res3] = eimp_tot
+    print("-> Residue atomic types")
+    # print(residues_ducarmeType)
+    # print("-> Backbone")
+    # print(backbone_data)
+    # print("-> Sidechain")
+    # print(sidechain_data)
+
+    # final_residues_ducarmeType[res3].update(residues_ducarmeType.tr_new)
+    final_residues_type[res3].update(best_tr_new)
+    final_residues_type.loc["eimp_new", eimp_new_all.keys()] = ["{0:0.4f}".format(e) if isinstance(e,float) else e for e in eimp_new_all.values()]
+
+    print("-> Final residues ducarmeType")
+    print(final_residues_type.to_string(col_space=4))
+
+    # final_residues_ducarmeType.to_excel('out_table.xlsx', float_format='%.3f')
+    # system("cat out_table.xlsx")
+
+    res_data.tr_new.update(best_tr_new)
+
+    for index, row in res_data.iterrows():
+        nametotransfert_ajusted_lines.append("{0}\t{1:.4f}\n".format(res1+row['atomName'], row['tr_new']))
+
+    # save typetotransfer
+    for index, row in residues_type.loc[backbone_index.union(sidechain_index)].iterrows():
+        particletypetotransfert_ajusted_lines.append("{0}\t{1:.4f}\t{2:.4f}\n".format(res3+"-"+row.name, row.tr_ref,  row.tr_new))
+
+
+save_text_to_file(''.join(nametotransfert_ajusted_lines), "nametotransfer_ajusted_"+adjustment_representation+"_"+ms+".txt")
+save_text_to_file(''.join(particletypetotransfert_ajusted_lines), "particletypetotransfer_ajusted_"+adjustment_representation+"_"+ms+".txt")
+
