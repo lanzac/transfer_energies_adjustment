@@ -1,3 +1,9 @@
-aa_database
-amino_acids_pdbs
-amino_acids_martini_pdbs
+input_data/aa_database/*
+!input_data/aa_database/.gitkeep
+
+input_data/amino_acids_pdbs/*
+!input_data/amino_acids_pdbs/.gitkeep
+
+input_data/amino_acids_martini_pdbs/*
+!input_data/amino_acids_martini_pdbs/.gitkeep
+
