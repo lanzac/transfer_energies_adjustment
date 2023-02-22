@@ -157,7 +157,7 @@ def read_nametotransfer_file(file_path):
 def prep():
 
     # Write Reduce rule
-    write_grp = open("../data/reducerules/martini.grp", "w")
+    write_grp = open("../output/martini/reducerules/martini.grp", "w")
     for res3, res1 in residueName3To1.items():
 
         # Set BioSpring particle name for bb
@@ -171,7 +171,7 @@ def prep():
     write_grp.close()    
 
     # Write Forcefield
-    write_ff = open(f"../data/forcefield/martini_{ff_id_name}.ff", "w")
+    write_ff = open(output_filename, "w")
     ff_header = "#type	charge(e)	radius(A)	epsilon(kJ.mol-1)	mass(Da)	transferIMP(kJ.mol-1.A-2"
     write_ff.write(ff_header + "\n")
     for res3, res1 in residueName3To1.items():
@@ -219,15 +219,32 @@ parser = argparse.ArgumentParser(description="Prepare Martini version 3.0.b.3.2 
 group = parser.add_mutually_exclusive_group()
 group.add_argument('-ow','--oil-water', type=str, choices=['hexadecane', 'octanol'], help="Martini3 Oil/Water partition forcefield.")
 group.add_argument('-c','--config_file', type=str, help="nametotransfert configuration file input.")
+parser.add_argument('-o', type=str, help="Output forcefield file (mandatory if config file set).")
 
 if __name__ == '__main__':
     args = parser.parse_args(sys.argv[1:])
+
+    if (len(sys.argv[1:]) == 0):
+        parser.print_help()
+        parser.exit()
+
+    
+    
     name_to_transfer = {}
     if (args.config_file):
-        ff_id_name = "adjusted"
+        if (args.o is None):
+            parser.error("--config_file requires -o output_filename")
+        else:
+            output_filename = args.o
+
         name_to_transfer = read_nametotransfer_file(args.config_file)
     elif (args.oil_water):
-        ff_id_name = args.oil_water
+        if (args.o is None):
+            ff_id_name = "raw_" + args.oil_water
+            output_filename = f"../output/martini/martini_{ff_id_name}.ff"
+        else:
+            output_filename = args.o
+        
         match args.oil_water:
             case 'hexadecane':
                 choosed_partition = HD_WN

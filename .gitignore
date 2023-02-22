@@ -7,3 +7,8 @@ input_data/amino_acids_pdbs/*
 input_data/amino_acids_martini_pdbs/*
 !input_data/amino_acids_martini_pdbs/.gitkeep
 
+output/brasseur/*
+!output/brasseur/.gitkeep
+
+output/martini/*
+!output/martini/.gitkeep

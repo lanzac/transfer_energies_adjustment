@@ -83,16 +83,22 @@ def adjust():
         case "brasseur":
             type_to_Etr = exp.ducarmeType_to_Etr
             ref_type_ratio_name = "Csp3"
-            residues_data_path = "../input_data/nametotype/brasseur_nametotype.txt"
+            residues_data_path = "../ff_data/nametotype/brasseur_nametotype.txt"
             res_pdbs_dir_path = "../input_data/amino_acids_pdbs"
             init_ener_values = "brasseur"
         
         case "martini":
             martini_sources = {"HexadecaneBeadSurf": exp.HD_to_Etr, "OctanolBeadSurf": exp.OCOS_to_Etr, "HexadecanePartition": exp.HD_WN, "OctanolPartition": exp.OCOS_WN}
-            init_ener_values = "OctanolPartition"
-            type_to_Etr = martini_sources[init_ener_values] # Hexadecane/Water
+
+            init_ener_values = oil_water_partition
+            match oil_water_partition:
+                case "hexadecane":
+                    type_to_Etr = martini_sources["HexadecaneBeadSurf"]
+                case "octanol":
+                    type_to_Etr = martini_sources["OctanolBeadSurf"]
+
             ref_type_ratio_name = "P2"
-            residues_data_path = "../input_data/nametotype/martini_nametotype.txt"
+            residues_data_path = "../ff_data/nametotype/martini_nametotype.txt"
             res_pdbs_dir_path = "../input_data/amino_acids_martini_pdbs"
 
 
@@ -392,12 +398,14 @@ def adjust():
             particletypetotransfert_ajusted_lines.append("{0}\t{1:.4f}\t{2:.4f}\n".format(res3+"-"+row.name, row.tr_ref,  row.tr_new))
 
 
-    nametotransfer_name = "nametotransfer_ajusted_"+adjustment_representation+"_"+init_ener_values+".txt"
-    save_text_to_file(''.join(nametotransfert_ajusted_lines), os.path.join(output_path, nametotransfer_name))
-    print(f"-> Output nametotransfert saved to {os.path.join(output_path, nametotransfer_name)}")
+    nametotransfer_name = "nametotransfer_adjusted_"+adjustment_representation+"_"+init_ener_values+".txt"
+    output_nametotransfer = os.path.join(output_path, adjustment_representation, nametotransfer_name)
+    save_text_to_file(''.join(nametotransfert_ajusted_lines), output_nametotransfer)
+    print(f"-> Output nametotransfert saved to {output_nametotransfer}")
 
-    particletypetotransfer_name = "particletypetotransfer_ajusted_"+adjustment_representation+"_"+init_ener_values+".txt"
-    save_text_to_file(''.join(particletypetotransfert_ajusted_lines), os.path.join(output_path, particletypetotransfer_name))
+    particletypetotransfer_name = "particletypetotransfer_adjusted_"+adjustment_representation+"_"+init_ener_values+".txt"
+    output_particletypetotransfer = os.path.join(output_path, adjustment_representation, particletypetotransfer_name)
+    save_text_to_file(''.join(particletypetotransfert_ajusted_lines),output_particletypetotransfer)
     print(f"-> Output particletypetotransfer saved to {os.path.join(output_path, particletypetotransfer_name)}")
 
 
@@ -407,6 +415,8 @@ parser = argparse.ArgumentParser(
 
 
 parser.add_argument('-r', type=str, choices=['brasseur', 'martini'], help="Choose representation mode.", required=True)
+parser.add_argument('--oil_water', type=str, choices=['hexadecane', 'octanol'], help="Martini3 Oil/Water partition forcefield.")
+
 parser.add_argument('-m', type=int, choices=[0, 1, 2, 3, 4], help="Choose method, 0 for all.", default=0)
 parser.add_argument('--n', type=int, help="Number of iterations.", default=100000)
 
@@ -417,12 +427,24 @@ if __name__ == '__main__':
         parser.print_help()
         parser.exit()
 
-    adjustment_representation = args.r
-
     if (args.m == 0):
         methods = [1, 2, 3, 4]
     else:
         methods = [args.m]
+    
+    if (args.r == "martini" and args.oil_water is None):
+        parser.error("-r martini requires --oil_water [hexadecane, octanol]")
+    elif ((args.r == "martini" and args.oil_water is not None)):
+        oil_water_partition = args.oil_water
+        print("Set method to 1.")
+        methods = [1]
+
+
+    adjustment_representation = args.r
+
+
+
+
 
     N = args.n
 
